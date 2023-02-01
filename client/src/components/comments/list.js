@@ -4,8 +4,15 @@ import React, { useEffect, useState } from 'react'
 const List = ({ comments }) => {
 
     const renderedComments = comments && comments.map((comment) => {
+        const { content, id, status } = comment
+        let newContent
+
+        if (status == 'approved') { newContent = content }
+        if (status == 'pending') { newContent = 'This comment is awaiting moderation' }
+        if (status == 'rejected') { newContent = 'This comment has been rejected' }
+
         return (
-            <li key={comment.id} >{comment.content}</li>
+            <li key={id} >{newContent}</li>
         )
     })
 
