@@ -15,7 +15,7 @@ spec:
       containers:
         - name: event-bus
           image: kk032/event-bus
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
 ---
 apiVersion: v1
 kind: Service

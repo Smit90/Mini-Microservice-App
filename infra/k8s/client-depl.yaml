@@ -15,7 +15,7 @@ spec:
       containers:
         - name: client
           image: kk032/client
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
 ---
 apiVersion: v1
 kind: Service
