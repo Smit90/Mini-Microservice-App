@@ -3,7 +3,10 @@ const bodyParser = require('body-parser')
 const { randomBytes } = require('crypto')
 const cors = require('cors')
 const axios = require('axios')
-
+const amqp = require('amqplib')
+const Producer = require('./producer')
+const producer = new Producer()
+const config = require('../config/rabbitMQ-config')
 const app = express()
 
 const commentsByPostId = {}
@@ -29,49 +32,54 @@ app.post('/posts/:id/comments', async (req, res) => {
 
     comments.push({ id: commentId, content, status: 'pending' })
     commentsByPostId[id] = comments
-
-    await axios.post('http://localhost:4005/events', {
-        type: 'CommentCreated',
-        data: {
-            id: commentId,
-            content,
-            postId: id,
-            status: 'pending'
-        }
-    })
-
+    await producer.publishMessage('CommentCreated', {
+        id: commentId,
+        content,
+        postId: id,
+        status: 'pending'
+    });
     res.status(201).send(comments)
 })
 
 
-app.post('/events', async (req, res) => {
-    console.log('eventssss received', req.body.type);
-    const { type, data } = req.body
-    if (type == 'CommentModerated') {
-        const { postId, id, status, content } = data
+async function consumeMessages() {
+    const connection = await amqp.connect(config.rabbitMQ.url);
+    const channel = await connection.createChannel();
+
+
+    const exchangeName = config.rabbitMQ.exchangeName;
+    await channel.assertExchange(exchangeName, "direct");
+
+    const q = await channel.assertQueue("CommentQueue")
+
+    await channel.bindQueue(q.queue, exchangeName, "CommentModerated");
+
+    channel.consume(q.queue, (msg) => {
+        const data = JSON.parse(msg.content);
+        console.log("Comment Queue", data);
+        const { logType, data: commentData } = data
+        const { postId, id, status } = commentData
+
         const comments = commentsByPostId[postId]
 
-        const comment = comments.find(c => c.id == id)
+        const commData = comments.find(c => c.id == id)
+        commData.status = status
+        publishData(commentData)
+        channel.ack(msg);
+    });
 
-        comment.status = status
+}
 
-        await axios.post('http://localhost:4005/events', {
-            type: 'CommentUpdated',
-            data: {
-                id,
-                content,
-                postId,
-                status
-            }
-        })
 
-    }
-    res.send({})
-})
+const publishData = async (data) => {
+    await producer.publishMessage("CommentUpdated", data)
+}
+
 
 
 const PORT = process.env.PORT || 4001
 
 app.listen(PORT, () => {
     console.log("Server is running on port: ", PORT);
+    consumeMessages()
 })
